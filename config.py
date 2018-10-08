@@ -41,6 +41,9 @@ def parse_args():
     parser.add_argument(
         '-seed', dest='seed',
         help='Random seed for numpy and python.', default=2905, type=int)
+    parser.add_argument(
+        '-max_side', dest='max_side',
+        help='Maximum side length of the picture.', default=400, type=int)
 
     args = parser.parse_args()
     return args
