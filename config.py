@@ -27,11 +27,11 @@ def parse_args():
         help='Gap between frames while running tracker. Default 0.',
         default=0, type=int)
     parser.add_argument(
-        '-n', dest='maxShots',
+        '-n', dest='max_shots',
         help='Max number of shots to break into. Default 5.',
         default=50, type=int)
     parser.add_argument(
-        '-d', dest='colBins',
+        '-d', dest='col_bins',
         help='Number of bins in RGBLAB histogram. Default 40. ',
         default=40, type=int)
     parser.add_argument(

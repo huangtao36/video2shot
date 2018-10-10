@@ -3,37 +3,76 @@
 """
 This code is used to convert video to frame-level images, sampled as 2pfs
 """
-
+from __future__ import unicode_literals
 import cv2
 import os
 import time
+import random
+import json
+import h5py
+from load_tvsum_utils import load_tvsum, get_summary
 
-video_dir = './video'
-save_root_path = './imdir'
-os.mkdir(save_root_path) if not os.path.exists(save_root_path) else None
 
-st = time.time()
+def sample_tvsum_video(video_dir, save_root_path, data_root_path):
 
-for i, video in enumerate(os.listdir(video_dir)):
-    video_num = len(os.listdir(video_dir))
-    vidcap = cv2.VideoCapture(video)
+    st = time.time()
+    print("Load tvsum annotation data...")
+    video_dic = load_tvsum(data_root_path=data_root_path, scale=True)
+    print("用时: {0}s".format(time.time() - st))
 
-    save_path = os.path.join(save_root_path, video.split('.')[0])
-    if not os.path.exists(save_path):
-        os.mkdir(save_path)
+    # st = time.time()
 
-    frames = vidcap.get(cv2.CAP_PROP_FRAME_COUNT)  # 帧数
-    fps = vidcap.get(cv2.CAP_PROP_FPS)
-    # print(fps)
+    os.mkdir(save_root_path) if not os.path.exists(save_root_path) else None
+    f = h5py.File(os.path.join(save_root_path, 'sample_anno.h5'), 'w')
 
-    # 这里固定10帧间隔采样，原应按照帧率计算采样间隔的，采样后为 2-3 fps
-    for n in range(round(frames / 10)):
-        print("共:{0}个视频, 进度:{1}%, 已耗时:{2}s".format(
-            video_num,
-            round((i + 1) * 100 / video_num),
-            round(time.time() - st, 2)), end="\r")
+    for key in video_dic:
+        video_name = key
+        fps = video_dic[key]['fps']
+        frames = video_dic[key]['frames']
+        user_score = video_dic[key]['user_score']
+        avg_score = video_dic[key]['avg_score']
 
-        vidcap.set(cv2.CAP_PROP_POS_FRAMES, n * 10)
-        bool_, img = vidcap.read()
+        internal = ((fps + 1) // 2)
+        # 每秒取两帧，随机取
+        select = []
+        for n in range(round(frames // internal)):
+            # 这里最后的1-2秒内的帧不会被选择到，因为取整的问题，
+            # 考虑到视频最后1-2秒的信息量一般不大，可认为是合理的
+            select_num = (n * internal) + random.randint(0, internal)
+            select.append(select_num)
 
-        cv2.imwrite(os.path.join(save_path, "%s.png" % str(n)), img)
+        video_file = os.path.join(video_dir, video_name + '.mp4')
+        video_capture = cv2.VideoCapture(video_file)
+
+        save_path = os.path.join(save_root_path, video_name)
+        if not os.path.exists(save_path):
+            os.mkdir(save_path)
+
+        sample_score = []
+        serial_number = 0
+        for n in select:
+            sample_score.append(avg_score[n])
+
+            video_capture.set(cv2.CAP_PROP_POS_FRAMES, n)
+            bool_, img = video_capture.read()
+
+            if bool_:
+                cv2.imwrite(os.path.join(save_path, '%s.png' % str(serial_number)), img)
+
+            serial_number += 1
+        video_dic[key]['avg_score'] = sample_score
+
+        subgroup = f.create_group(video_name)
+        subgroup.create_dataset('sample_scores', data=sample_score)
+    f.close()
+
+
+if __name__ == '__main__':
+    project_par_path = os.path.abspath(os.path.join(os.getcwd(), "../"))
+    data_root_path = os.path.join(project_par_path, 'Dataset', 'ydata-tvsum50-v1_1')
+
+    video_path = os.path.join(data_root_path, 'video')
+
+    save_root_path = os.path.join(data_root_path, 'sample_video')
+
+    sample_tvsum_video(video_path, save_root_path, data_root_path)
